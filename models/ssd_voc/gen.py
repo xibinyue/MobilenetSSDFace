@@ -441,7 +441,7 @@ layer {
   }
 }""" % bottom)
 
-    def conv(self, name, out, kernel, stride=1, group=1, bias=False, bottom=None):
+    def conv(self, name, out, kernel, stride=1, group=1, conv_type='Convolution', bias=False, bottom=None):
 
       if self.stage == "deploy": #for deploy, merge bn to bias, so bias must be true
           bias = True
@@ -476,7 +476,7 @@ layer {
       print(
 """layer {
   name: "%s"
-  type: "Convolution"
+  type: "%s"
   bottom: "%s"
   top: "%s"
   param {
@@ -490,7 +490,7 @@ layer {
       type: "msra"
     }%s
   }
-}""" % (name, bottom, name, bias_lr_mult, out, biasstr, padstr, kernel, stridestr, groupstr, bias_filler))
+}""" % (name, conv_type, bottom, name, bias_lr_mult, out, biasstr, padstr, kernel, stridestr, groupstr, bias_filler))
       self.last = name
     
     def bn(self, name):
@@ -567,7 +567,7 @@ layer {
       inp = int(inp * self.size)
       outp = int(outp * self.size)
       name1 = name + "/dw"
-      self.conv(name1, inp, 3, stride, inp)
+      self.conv(name1, inp, 3, stride, inp, conv_type='ConvolutionDepthwise')
       self.bn(name1)
       self.relu(name1)
       name2 = name 
