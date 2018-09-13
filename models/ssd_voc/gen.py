@@ -13,7 +13,7 @@ class Generator():
 
     def header(self, name):
       print("name: \"%s\"" % name)
-    
+
     def data_deploy(self):
       print(
 """input: "data"
@@ -23,7 +23,7 @@ input_shape {
   dim: %d
   dim: %d
 }""" % (self.input_size, self.input_size))
-    
+
     def data_train_classifier(self):
       print(
 """layer {
@@ -43,7 +43,7 @@ input_shape {
     }
     include: { phase: TRAIN }
 }
-}""") 
+}""")
 
     def data_train_ssd(self):
       print(
@@ -456,7 +456,7 @@ layer {
           groupstr = "\n    group: %d\n    engine: CAFFE" % group
       stridestr = ""
       if stride > 1:
-          stridestr = "\n    stride: %d" % stride 
+          stridestr = "\n    stride: %d" % stride
       bias_lr_mult = ""
       bias_filler = ""
       if bias == True:
@@ -492,7 +492,7 @@ layer {
   }
 }""" % (name, conv_type, bottom, name, bias_lr_mult, out, biasstr, padstr, kernel, stridestr, groupstr, bias_filler))
       self.last = name
-    
+
     def bn(self, name):
       if self.stage == "deploy":  #deploy does not need bn, you can use merge_bn.py to generate a new caffemodel
          return
@@ -539,7 +539,7 @@ layer {
   }
 }""" % (name,name,name,name,name,name))
       self.last = name
-    
+
     def relu(self, name):
       print(
 """layer {
@@ -550,8 +550,8 @@ layer {
 }""" % (name, name, name))
       self.last
       self.last = name
-    
-    
+
+
     def conv_bn_relu(self, name, num, kernel, stride):
       self.conv(name, num, kernel, stride)
       self.bn(name)
@@ -562,7 +562,7 @@ layer {
       self.conv(name, num, kernel, stride)
       self.bn(name)
       self.relu(name)
-    
+
     def conv_dw_pw(self, name, inp, outp, stride):
       inp = int(inp * self.size)
       outp = int(outp * self.size)
@@ -570,11 +570,11 @@ layer {
       self.conv(name1, inp, 3, stride, inp, conv_type='ConvolutionDepthwise')
       self.bn(name1)
       self.relu(name1)
-      name2 = name 
+      name2 = name
       self.conv(name2, outp, 1)
       self.bn(name2)
       self.relu(name2)
-    
+
     def ave_pool(self, name):
       print(
 """layer {
@@ -588,7 +588,7 @@ layer {
   }
 }""" % (name, self.last, name))
       self.last = name
-    
+
     def permute(self, name):
       print(
 """layer {
@@ -604,7 +604,7 @@ layer {
   }
 }""" % (name, name, name))
       self.last = name + "_perm"
-    
+
     def flatten(self, name):
       print(
 """layer {
@@ -617,7 +617,7 @@ layer {
   }
 }""" % (name, name, name))
       self.last = name + "_flat"
-    
+
     def mbox_prior(self, name, min_size, max_size, aspect_ratio):
       min_box = self.input_size * min_size
       max_box_str = ""
@@ -627,7 +627,7 @@ layer {
           max_box_str = "\n    max_size: %.1f" % max_box
       for ar in aspect_ratio:
           aspect_ratio_str += "\n    aspect_ratio: %.1f" % ar
-      
+
       print(
 """layer {
   name: "%s_mbox_priorbox"
@@ -687,7 +687,7 @@ layer {
   }
 }""" % (name, self.last, name, output))
       self.last = name
-    
+
     def reshape(self, name, output):
       print(
 """layer {
@@ -733,14 +733,14 @@ layer {
       self.conv_dw_pw("conv3", 128, 128, 1)
       self.conv_dw_pw("conv4", 128, 256, 2)
       self.conv_dw_pw("conv5", 256, 256, 1)
-      self.conv_dw_pw("conv6", 256, 512, 2) 
+      self.conv_dw_pw("conv6", 256, 512, 2)
       self.conv_dw_pw("conv7", 512, 512, 1)
       self.conv_dw_pw("conv8", 512, 512, 1)
       self.conv_dw_pw("conv9", 512, 512, 1)
       self.conv_dw_pw("conv10",512, 512, 1)
       self.conv_dw_pw("conv11",512, 512, 1)
-      self.conv_dw_pw("conv12",512, 1024, 2) 
-      self.conv_dw_pw("conv13",1024, 1024, 1) 
+      self.conv_dw_pw("conv12",512, 1024, 2)
+      self.conv_dw_pw("conv13",1024, 1024, 1)
       if gen_ssd is True:
           self.conv_bn_relu("conv14_1", 256, 1, 1)
           self.conv_bn_relu("conv14_2", 512, 3, 2)
@@ -769,7 +769,68 @@ layer {
           if stage == "train":
              self.classifier_loss()
 
-   
+
+    def generate_short(self, stage, gen_ssd, size, class_num):
+      self.class_num = class_num
+      self.lmdb = FLAGS.lmdb
+      self.label_map = FLAGS.label_map
+      self.stage = stage
+      if gen_ssd:
+          self.input_size = 300
+      else:
+          self.input_size = 224
+      self.size = size
+      self.class_num = class_num
+
+      if gen_ssd:
+          self.header("MobileNet-SSD")
+      else:
+          self.header("MobileNet")
+      if stage == "train":
+          if gen_ssd:
+              assert(self.lmdb is not None)
+              assert(self.label_map is not None)
+              self.data_train_ssd()
+          else:
+              assert(self.lmdb is not None)
+              self.data_train_classifier()
+      elif stage == "test":
+          self.data_test_ssd()
+      else:
+          self.data_deploy()
+      self.conv_bn_relu_with_factor("conv0", 32, 3, 2)
+      self.conv_dw_pw("conv1", 32,  64, 1)
+      self.conv_dw_pw("conv2", 64, 128, 2)
+      self.conv_dw_pw("conv3", 128, 128, 1)
+      self.conv_dw_pw("conv4", 128, 256, 2)
+      self.conv_dw_pw("conv5", 256, 256, 1)
+      self.conv_dw_pw("conv6", 256, 512, 2)
+      self.conv_dw_pw("conv7", 512, 512, 1)
+      self.conv_dw_pw("conv8", 512, 1024, 2)
+      self.conv_dw_pw("conv9", 1024, 1024, 1)
+      if gen_ssd is True:
+          self.conv_bn_relu("conv10_1", 256, 1, 1)
+          self.conv_bn_relu("conv10_2", 512, 3, 2)
+          self.conv_bn_relu("conv11_1", 64, 1, 1)
+          self.conv_bn_relu("conv11_2", 128, 3, 2)
+          self.mbox("conv7", 2) #3
+          self.mbox("conv9", 2) #6
+          self.mbox("conv10_2", 2) #6
+          self.mbox("conv11_2", 2) #6
+          self.concat_boxes(['conv7', 'conv9', 'conv10_2', 'conv11_2'])
+          if stage == "train":
+             self.ssd_loss()
+          elif stage == "deploy":
+             self.ssd_predict()
+          else:
+             self.ssd_test()
+      else:
+          self.ave_pool("pool")
+          self.conv("fc", class_num, 1, 1, 1, True)
+          if stage == "train":
+             self.classifier_loss()
+
+
 def create_ssd_anchors(num_layers=6, min_scale=0.2, max_scale=0.95):
   scales = [min_scale + (max_scale - min_scale) * i / (num_layers - 1)
             for i in range(num_layers)] + [1.0]
@@ -816,3 +877,4 @@ if __name__ == '__main__':
   FLAGS, unparsed = parser.parse_known_args()
   gen = Generator()
   gen.generate(FLAGS.stage, not FLAGS.classifier, FLAGS.size, FLAGS.class_num)
+  gen.generate_short(FLAGS.stage, not FLAGS.classifier, FLAGS.size, FLAGS.class_num)
